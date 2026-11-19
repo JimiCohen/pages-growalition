@@ -820,16 +820,21 @@ input:focus{outline:2px solid var(--glow);outline-offset:1px}
     err.hidden = true; send.disabled = true; send.textContent = 'Sending…';
     try {
       if (!d.website) {  // honeypot: bots fill it, people never see it
-        const res = await fetch(ENDPOINT, {
-          method: 'POST',
+        const req = fetch(ENDPOINT, {
+          method: 'POST', keepalive: true,
           headers: {'Content-Type': 'application/json', Accept: 'application/json'},
           body: JSON.stringify({
             _subject: `GROWalition sign-up: ${way.label} (${name})`, _template: 'table',
             role: way.label, name, email: d.email.trim(), phone: d.phone.trim(), page: location.href,
           }),
+        }).then(async (res) => {
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok || String(j.success) !== 'true') throw new Error(j.message || res.status);
         });
-        const j = await res.json().catch(() => ({}));
-        if (!res.ok || String(j.success) !== 'true') throw new Error(j.message || res.status);
+        // ponytail: FormSubmit can take a minute to answer. Fast failures still show the
+        // error; after 8 s we trust the in-flight request (keepalive finishes it if the tab closes).
+        await Promise.race([req, new Promise((ok) => setTimeout(ok, 8000))]);
+        req.catch(() => {});
       }
       showDone(name);
     } catch {
